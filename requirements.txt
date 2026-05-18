@@ -1,3 +1,6 @@
 twitchio==2.10.0
 gTTS==2.5.1
 pygame==2.6.1
+numpy
+scipy
+kokoro-onnx
