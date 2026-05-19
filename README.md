@@ -1,6 +1,6 @@
 # Twitch Chat TTS Bot
 
-A Twitch IRC bot that reads chat messages aloud using text-to-speech — **completely free and runs 100% locally on your machine.** No subscriptions, no API keys, no cloud fees. Just run it and go live.
+A Twitch IRC bot that reads chat messages aloud using text-to-speech — **completely free and runs 100% locally on your machine.** No subscriptions, no cloud fees. Just run it and go live.
 
 Supports two TTS backends: **Kokoro** (local ONNX model, high-quality, zero cost) with automatic fallback to **gTTS** (Google Text-to-Speech, free, requires internet). Includes profanity filtering, user blacklisting, emote stripping, and moderator voice controls.
 
