@@ -49,7 +49,7 @@ Open `twitch-chat-tts.py` and update the constants near the top of the file:
 
 | Constant | Description |
 |---|---|
-| `BOT_TOKEN` | OAuth token for your bot account — get one free at [twitchapps.com/tmi](https://twitchapps.com/tmi/) |
+| `BOT_TOKEN` | OAuth token for your bot account — get one free at [https://twitchtokengenerator.com/](https://twitchtokengenerator.com/) |
 | `BOT_NICKNAME` | Your bot account's Twitch username |
 | `CHANNELS` | List of channel names to join |
 
