@@ -1,6 +1,15 @@
-twitchio==2.10.0
-gTTS==2.5.1
-pygame==2.6.1
-numpy
-scipy
-kokoro-onnx
+# Twitch Chat TTS Bot - Dependencies
+
+# Twitch IRC client
+twitchio>=2.6.0
+
+# TTS backends
+gtts>=2.5.0          # Google Text-to-Speech (fallback)
+kokoro-onnx>=0.4.0   # Kokoro local ONNX TTS (primary)
+
+# Audio playback
+pygame>=2.5.0
+
+# Audio / numeric processing
+numpy>=1.24.0
+scipy>=1.11.0

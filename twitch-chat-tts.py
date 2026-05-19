@@ -3,8 +3,10 @@
 import asyncio
 import os
 import re
+import time
+import logging
 from pathlib import Path
-from typing import Set
+from typing import Optional, Set
 
 import numpy as np
 import pygame
@@ -20,9 +22,9 @@ import kokoro_onnx
 # CONFIGURATION & CONSTANTS
 # ============================================================================
 
-BOT_TOKEN = "$ACCESS_TOKEN"
+BOT_TOKEN = "$ACCESS_TOKEN"  # Replace with your Twitch bot token
 BOT_NICKNAME = "$BOT_NICKNAME"
-CHANNELS = ["$CHANNEL_NAME"]
+CHANNELS = ["$CHANNEL_NAME"]  # Replace with the channel(s) to join
 
 KOKORO_MODEL_PATH = r"modelvoice\kokoro-quant.onnx"
 KOKORO_VOICES_PATH = r"modelvoice\voices-v1.0.bin"
@@ -30,7 +32,9 @@ KOKORO_DEFAULT_VOICE = "af_heart"
 
 BAD_WORDS_FILE = "bad-words.txt"
 BLACKLIST_FILE = "blacklist.txt"
+IGNORE_WORDS_FILE = "ignore-words.txt"
 TTS_TEMP_FILE = "tts_temp.wav"
+NAME_REPEAT_COOLDOWN_SECONDS = 5 * 60
 
 
 # ============================================================================
@@ -56,6 +60,28 @@ def load_bad_words(filepath: str = BAD_WORDS_FILE) -> Set[str]:
             }
     except FileNotFoundError:
         print(f"[WARNING] Bad words list not found at {filepath}. Profanity filter disabled.")
+        return set()
+
+
+def load_ignore_words(filepath: str = IGNORE_WORDS_FILE) -> Set[str]:
+    """
+    Load words to strip from TTS output (e.g. emotes, spam).
+
+    Args:
+        filepath: Path to the ignore words file.
+
+    Returns:
+        A set of lowercase words to omit from speech.
+    """
+    try:
+        with open(filepath, encoding="utf-8") as f:
+            return {
+                line.strip().lower()
+                for line in f
+                if line.strip() and not line.strip().startswith("#")
+            }
+    except FileNotFoundError:
+        print(f"[WARNING] Ignore words list not found at {filepath}. Ignore filter disabled.")
         return set()
 
 
@@ -142,12 +168,35 @@ def contains_profanity(text: str, bad_words: Set[str]) -> bool:
     return bool(pattern.search(text))
 
 
+def strip_ignored_words(text: str, ignore_words: Set[str]) -> str:
+    """
+    Remove ignore-list words from text before TTS.
+
+    Args:
+        text: The text to filter.
+        ignore_words: Set of words to strip.
+
+    Returns:
+        Text with ignored words removed and whitespace normalized.
+    """
+    if not text or not ignore_words:
+        return text
+
+    pattern = re.compile(
+        r"(?<!\w)(" + "|".join(re.escape(word) for word in ignore_words) + r")(?!\w)",
+        flags=re.IGNORECASE,
+    )
+    result = pattern.sub("", text)
+    return re.sub(r"\s+", " ", result).strip()
+
+
 # ============================================================================
 # GLOBAL STATE
 # ============================================================================
 
 BLACKLISTED_USERS: Set[str] = load_user_list(BLACKLIST_FILE)
 BAD_WORDS: Set[str] = load_bad_words()
+IGNORE_WORDS: Set[str] = load_ignore_words()
 
 TTS_ENGINE = None
 CURRENT_VOICE = KOKORO_DEFAULT_VOICE
@@ -274,6 +323,19 @@ class TwitchBot(commands.Bot):
     def __init__(self):
         """Initialize the bot with token and channels."""
         super().__init__(token=BOT_TOKEN, prefix="!", initial_channels=CHANNELS)
+        self.last_announced_user: Optional[str] = None
+        self.last_name_announced_at: Optional[float] = None
+
+    def _should_announce_name(self, author_name: str) -> bool:
+        if self.last_announced_user != author_name:
+            return True
+        if self.last_name_announced_at is None:
+            return True
+        return time.monotonic() - self.last_name_announced_at >= NAME_REPEAT_COOLDOWN_SECONDS
+
+    def _mark_name_announced(self, author_name: str) -> None:
+        self.last_announced_user = author_name
+        self.last_name_announced_at = time.monotonic()
 
     async def event_ready(self) -> None:
         """Handle bot startup and connection."""
@@ -401,13 +463,28 @@ class TwitchBot(commands.Bot):
             return
 
         # Process message for TTS
+        include_name = self._should_announce_name(author_name)
+
         if contains_profanity(content, BAD_WORDS):
             print(f"[CHAT] {message.author.name}: [profanity detected]")
-            announcement = f"Uh oh, {message.author.name} said a word they shouldn't have!"
+            if include_name:
+                announcement = f"Uh oh, {message.author.name} said a word they shouldn't have!"
+            else:
+                announcement = "Uh oh, they said a word they shouldn't have!"
         else:
             filtered_content = filter_profanity(content, BAD_WORDS)
             print(f"[CHAT] {message.author.name}: {filtered_content}")
-            announcement = f"{message.author.name} said: {filtered_content}"
+            tts_content = strip_ignored_words(filtered_content, IGNORE_WORDS)
+            if not tts_content:
+                print(f"[FILTERED] Message contained only ignored words.")
+                return
+            if include_name:
+                announcement = f"{message.author.name} said: {tts_content}"
+            else:
+                announcement = tts_content
+
+        if include_name:
+            self._mark_name_announced(author_name)
 
         await async_speak(announcement)
         await self.handle_commands(message)
